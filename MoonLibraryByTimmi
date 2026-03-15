@@ -282,9 +282,3 @@ function Moon:CreateWindow(cfg)
 
     return Win
 end
-
--- ── Example Usage ───────────────────────────────────────
-local Window = Moon:CreateWindow({ Title = "My Script" })
-local Tab = Window:CreateTab("Main")
-Tab:CreateSection("Example Button")
-Tab:CreateButton({ Name="Hello World", Description="Prints Hello", Callback=function() print("Hello World") end })
