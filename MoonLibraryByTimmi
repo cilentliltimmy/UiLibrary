@@ -1,0 +1,290 @@
+local TweenService     = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local Players          = game:GetService("Players")
+local LP               = Players.LocalPlayer
+local RunService       = game:GetService("RunService")
+
+-- ── Theme ───────────────────────────────────────────────
+local T = {
+    Bg      = Color3.fromRGB(12, 12, 14),
+    Surface = Color3.fromRGB(20, 20, 24),
+    SurfHov = Color3.fromRGB(30, 30, 36),
+    Border  = Color3.fromRGB(45, 45, 55),
+    Accent  = Color3.fromRGB(255, 255, 255),
+    Text    = Color3.fromRGB(255, 255, 255),
+    TextDim = Color3.fromRGB(120, 120, 130),
+    TogOn   = Color3.fromRGB(255, 255, 255),
+    TogOff  = Color3.fromRGB(50, 50, 60),
+    Success = Color3.fromRGB(80, 200, 120),
+    Warning = Color3.fromRGB(255, 180, 60),
+    Danger  = Color3.fromRGB(255, 80, 80),
+}
+
+-- ── Utilities ───────────────────────────────────────────
+local function N(cls, p)
+    local o = Instance.new(cls)
+    for k, v in pairs(p) do
+        if k ~= "Par" then
+            pcall(function() o[k] = v end)
+        end
+    end
+    if p.Par then o.Parent = p.Par end
+    return o
+end
+
+local function Crn(r)
+    return N("UICorner", { CornerRadius = UDim.new(0, r), Par = nil })
+end
+
+local function getGui()
+    local name = "MoonUIv2"
+    -- cleanup old instances
+    for _, parent in pairs({game:GetService("CoreGui"), LP:FindFirstChild("PlayerGui"), gethui and gethui()}) do
+        pcall(function()
+            if parent then
+                local old = parent:FindFirstChild(name)
+                if old then old:Destroy() end
+            end
+        end)
+    end
+    local sg = Instance.new("ScreenGui")
+    sg.Name = name
+    sg.ResetOnSpawn = false
+    sg.DisplayOrder = 999
+    pcall(function() sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling end)
+    pcall(function() sg.IgnoreGuiInset = true end)
+    sg.Parent = gethui and gethui() or game:GetService("CoreGui") or LP:WaitForChild("PlayerGui", 5)
+    return sg
+end
+
+-- ── Draggable ───────────────────────────────────────────
+local function makeDraggable(handle, target, blockList)
+    local dragging = false
+    local startMouse = Vector2.zero
+    local startPos = Vector2.zero
+    local touchId = nil
+
+    handle.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or (i.UserInputType==Enum.UserInputType.Touch and touchId==nil) then
+            local mp = i.UserInputType==Enum.UserInputType.MouseButton1 and UserInputService:GetMouseLocation() or Vector2.new(i.Position.X,i.Position.Y)
+            if blockList then
+                for _, b in ipairs(blockList) do
+                    local ap, as = b.AbsolutePosition, b.AbsoluteSize
+                    if mp.X >= ap.X and mp.X <= ap.X+as.X and mp.Y>=ap.Y and mp.Y<=ap.Y+as.Y then return end
+                end
+            end
+            dragging = true
+            startMouse = mp
+            touchId = i.UserInputType==Enum.UserInputType.Touch and i.KeyCode or nil
+            local parentAbs = target.Parent and target.Parent.AbsolutePosition or Vector2.zero
+            local abs = target.AbsolutePosition
+            startPos = Vector2.new(abs.X-parentAbs.X, abs.Y-parentAbs.Y)
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(i)
+        if i.UserInputType==Enum.UserInputType.MouseButton1 or (i.UserInputType==Enum.UserInputType.Touch and i.KeyCode==touchId) then
+            dragging=false
+            touchId=nil
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(i)
+        if not dragging then return end
+        local m = i.UserInputType==Enum.UserInputType.MouseMovement and UserInputService:GetMouseLocation() or (i.UserInputType==Enum.UserInputType.Touch and i.KeyCode==touchId and Vector2.new(i.Position.X,i.Position.Y))
+        if m then
+            local d = m - startMouse
+            target.Position = UDim2.fromOffset(startPos.X + d.X, startPos.Y + d.Y)
+        end
+    end)
+end
+
+-- ── Quick Press ─────────────────────────────────────────
+local function quickPress(btn, cb)
+    local pressTime = 0
+    btn.InputBegan:Connect(function(i)
+        if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+            pressTime=tick()
+        end
+    end)
+    btn.MouseButton1Up:Connect(function()
+        if tick()-pressTime<=0.3 then cb() end
+    end)
+end
+
+-- ── Device Detection ────────────────────────────────────
+local function getDeviceType()
+    local touchEnabled = UserInputService.TouchEnabled
+    local keyboardEnabled = UserInputService.KeyboardEnabled
+    if touchEnabled and not keyboardEnabled then
+        -- mobile or iPad
+        local screenSize = workspace.CurrentCamera.ViewportSize
+        if screenSize.X >= 768 and screenSize.Y >= 1024 then return "Mobile" end -- iPad treated as mobile
+        return "Mobile"
+    else
+        return "PC"
+    end
+end
+
+-- ── Moon UI ─────────────────────────────────────────────
+local Moon = {}
+
+function Moon:CreateWindow(cfg)
+    cfg = cfg or {}
+    local title = cfg.Title or "Moon"
+
+    -- Set size based on device
+    local device = getDeviceType()
+    local W, H = device=="PC" and 500 or 340, device=="PC" and 400 or 280
+
+    local gui = getGui()
+    local Root = N("Frame", {
+        Size = UDim2.fromOffset(W,H),
+        Position = UDim2.new(0.5,-W/2,0.5,-H/2),
+        BackgroundColor3 = T.Bg,
+        BorderSizePixel = 0,
+        ClipsDescendants = true,
+        Par = gui,
+    })
+    Crn(10).Parent = Root
+
+    -- Header
+    local Header = N("Frame", {Size=UDim2.new(1,0,0,38), BackgroundColor3=T.Surface, BorderSizePixel=0, Par=Root})
+    Crn(10).Parent = Header
+    N("Frame",{Size=UDim2.new(1,0,0,10), Position=UDim2.new(0,0,1,-10), BackgroundColor3=T.Surface, BorderSizePixel=0, Par=Header})
+    N("TextLabel",{Size=UDim2.new(1,-80,1,0), Position=UDim2.fromOffset(12,0), BackgroundTransparency=1, Text=title, TextColor3=T.Text, TextSize=14, Font=Enum.Font.GothamBold, TextXAlignment=Enum.TextXAlignment.Left, Par=Header})
+
+    local MinBtn = N("TextButton",{Size=UDim2.fromOffset(28,28), Position=UDim2.new(1,-62,0.5,-14), BackgroundTransparency=1, Text="–", TextColor3=T.TextDim, TextSize=18, Font=Enum.Font.GothamBold, Par=Header})
+    local CloseBtn = N("TextButton",{Size=UDim2.fromOffset(28,28), Position=UDim2.new(1,-32,0.5,-14), BackgroundTransparency=1, Text="X", TextColor3=T.TextDim, TextSize=13, Font=Enum.Font.GothamBold, Par=Header})
+
+    -- Tab bar
+    local TabBar = N("Frame",{Size=UDim2.new(1,0,0,28), Position=UDim2.fromOffset(0,38), BackgroundColor3=T.Surface, BorderSizePixel=0, Par=Root})
+    N("Frame",{Size=UDim2.new(1,0,0,1), Position=UDim2.new(0,0,1,-1), BackgroundColor3=T.Border, BorderSizePixel=0, Par=TabBar})
+    local TabHolder = N("Frame",{Size=UDim2.new(1,-12,1,0), Position=UDim2.fromOffset(6,0), BackgroundTransparency=1, Par=TabBar})
+    N("UIListLayout",{Padding=UDim.new(0,2), SortOrder=Enum.SortOrder.LayoutOrder, FillDirection=Enum.FillDirection.Horizontal, VerticalAlignment=Enum.VerticalAlignment.Center, Par=TabHolder})
+
+    -- Content
+    local ContentArea = N("Frame",{Size=UDim2.new(1,0,1,-66), Position=UDim2.fromOffset(0,66), BackgroundTransparency=1, ClipsDescendants=true, Par=Root})
+
+    -- Reopen button
+    local ReopenBtn = N("TextButton",{Size=UDim2.fromOffset(70,26), Position=UDim2.new(0.5,-35,0,8), BackgroundColor3=T.Surface, BackgroundTransparency=0.3, Text="Moon", TextColor3=T.Text, TextSize=12, Font=Enum.Font.GothamBold, ZIndex=100, Visible=false, Par=gui})
+    Crn(13).Parent = ReopenBtn
+
+    -- Drag handle
+    local DragHandle = N("TextButton",{Size=UDim2.new(1,-70,1,0), BackgroundTransparency=1, Text="", ZIndex=1, Par=Header})
+    makeDraggable(DragHandle, Root, nil)
+    makeDraggable(ReopenBtn, ReopenBtn)
+
+    -- Minimize/Close
+    local minimized=false
+    quickPress(MinBtn,function()
+        minimized = not minimized
+        TabBar.Visible = not minimized
+        ContentArea.Visible = not minimized
+        Root.Size = UDim2.fromOffset(W,minimized and 38 or H)
+    end)
+    quickPress(CloseBtn,function()
+        Root.Visible=false
+        ReopenBtn.Visible=true
+    end)
+    quickPress(ReopenBtn,function()
+        minimized=false
+        TabBar.Visible=true
+        ContentArea.Visible=true
+        Root.Size=UDim2.fromOffset(W,H)
+        Root.Visible=true
+        ReopenBtn.Visible=false
+    end)
+
+    -- ── Window object ─────────────────────────────
+    local Win={}
+    local tabs={}
+    local activeTab=nil
+
+    function Win:Notify(nc)
+        nc = nc or {}
+        local cols={info=T.Accent, success=T.Success, warning=T.Warning, error=T.Danger}
+        local col=cols[nc.Type or "info"] or T.Accent
+        local t=N("Frame",{Size=UDim2.fromOffset(260,60), Position=UDim2.new(1,10,1,-70), BackgroundColor3=T.Surface, ZIndex=200, Par=gui})
+        Crn(8).Parent=t
+        N("Frame",{Size=UDim2.new(0,3,0.6,0), Position=UDim2.new(0,0,0.2,0), BackgroundColor3=col, BorderSizePixel=0, ZIndex=201, Par=t})
+        N("TextLabel",{Size=UDim2.new(1,-18,0,18), Position=UDim2.fromOffset(14,8), BackgroundTransparency=1, Text=nc.Title or "", TextColor3=col, TextSize=12, Font=Enum.Font.GothamBold, TextXAlignment=Enum.TextXAlignment.Left, ZIndex=201, Par=t})
+        N("TextLabel",{Size=UDim2.new(1,-18,0,14), Position=UDim2.fromOffset(14,28), BackgroundTransparency=1, Text=nc.Message or "", TextColor3=T.TextDim, TextSize=10, Font=Enum.Font.Gotham, TextXAlignment=Enum.TextXAlignment.Left, ZIndex=201, Par=t})
+        TweenService:Create(t,TweenInfo.new(0.25,Enum.EasingStyle.Quart),{Position=UDim2.new(1,-270,1,-70)}):Play()
+        task.delay(nc.Duration or 4,function()
+            if t and t.Parent then
+                TweenService:Create(t,TweenInfo.new(0.2,Enum.EasingStyle.Quart),{Position=UDim2.new(1,10,1,-70)}):Play()
+                task.delay(0.22,function() if t and t.Parent then t:Destroy() end end)
+            end
+        end)
+    end
+
+    -- ── Tabs ──────────────────────────────────────────
+    function Win:CreateTab(name)
+        local scroll=N("ScrollingFrame",{Size=UDim2.new(1,0,1,0), BackgroundTransparency=1, BorderSizePixel=0, ScrollBarThickness=3, ScrollBarImageColor3=T.Border, ScrollingDirection=Enum.ScrollingDirection.Y, CanvasSize=UDim2.fromOffset(0,0), Visible=false, Par=ContentArea})
+        N("UIPadding",{PaddingTop=UDim.new(0,6),PaddingBottom=UDim.new(0,8),PaddingLeft=UDim.new(0,8),PaddingRight=UDim.new(0,8), Par=scroll})
+        local layout=N("UIListLayout",{Padding=UDim.new(0,5), SortOrder=Enum.SortOrder.LayoutOrder, FillDirection=Enum.FillDirection.Vertical, HorizontalAlignment=Enum.HorizontalAlignment.Center, Par=scroll})
+        layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() scroll.CanvasSize = UDim2.fromOffset(0, layout.AbsoluteContentSize.Y + 16) end)
+
+        local tabBtn=N("TextButton",{Size=UDim2.fromOffset(0,22), AutomaticSize=Enum.AutomaticSize.X, BackgroundTransparency=1, Text=name, TextColor3=T.TextDim, TextSize=11, Font=Enum.Font.GothamSemibold, Par=TabHolder})
+        N("UIPadding",{PaddingLeft=UDim.new(0,8), PaddingRight=UDim.new(0,8), Par=tabBtn})
+        Crn(5).Parent=tabBtn
+
+        local function activate()
+            for _,td in ipairs(tabs) do
+                td.s.Visible=false
+                td.b.TextColor3=T.TextDim
+                td.b.BackgroundTransparency=1
+            end
+            scroll.Visible=true
+            tabBtn.TextColor3=T.Text
+            tabBtn.BackgroundTransparency=0.85
+            activeTab=name
+        end
+        quickPress(tabBtn, activate)
+        tabBtn.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.Touch then activate() end end)
+        table.insert(tabs,{b=tabBtn,s=scroll})
+
+        if #tabs==1 then activate() end
+
+        local Tab = {}
+
+        function Tab:Hide() tabBtn.Visible=false; scroll.Visible=false end
+        function Tab:Show() tabBtn.Visible=true end
+        function Tab:Activate() activate() end
+
+        -- ── Section ───────────────────────────────
+        function Tab:CreateSection(label)
+            local f=N("Frame",{Size=UDim2.new(1,0,0,18), BackgroundTransparency=1, Par=scroll})
+            N("TextLabel",{Size=UDim2.new(1,0,1,0), BackgroundTransparency=1, Text=label:upper(), TextColor3=T.TextDim, TextSize=10, Font=Enum.Font.GothamBold, TextXAlignment=Enum.TextXAlignment.Left, Par=f})
+        end
+
+        -- ── Button ───────────────────────────────
+        function Tab:CreateButton(bc)
+            bc=bc or {}
+            local h=bc.Description and 46 or 32
+            local f=N("Frame",{Size=UDim2.new(1,0,0,h), BackgroundColor3=bc._color or T.Surface, Par=scroll})
+            Crn(6).Parent=f
+            N("TextLabel",{Size=UDim2.new(1,-16,0,16), Position=UDim2.fromOffset(10, bc.Description and 6 or 8), BackgroundTransparency=1, Text=bc.Name or "Button", TextColor3=bc._color and Color3.new(1,1,1) or T.Text, TextSize=12, Font=Enum.Font.GothamSemibold, TextXAlignment=Enum.TextXAlignment.Left, Par=f})
+            if bc.Description then
+                N("TextLabel",{Size=UDim2.new(1,-16,0,12), Position=UDim2.fromOffset(10,23), BackgroundTransparency=1, Text=bc.Description, TextColor3=bc._color and Color3.fromRGB(220,220,220) or T.TextDim, TextSize=10, Font=Enum.Font.Gotham, TextXAlignment=Enum.TextXAlignment.Left, Par=f})
+            end
+            local btn=N("TextButton",{Size=UDim2.new(1,0,1,0), BackgroundTransparency=1, Text="", Par=f})
+            btn.MouseEnter:Connect(function() if not bc._color then f.BackgroundColor3=T.SurfHov end end)
+            btn.MouseLeave:Connect(function() f.BackgroundColor3=bc._color or T.Surface end)
+            quickPress(btn,function() if bc.Callback then bc.Callback() end end)
+            btn.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.Touch and bc.Callback then bc.Callback() end end)
+            return f
+        end
+
+        return Tab
+    end
+
+    return Win
+end
+
+-- ── Example Usage ───────────────────────────────────────
+local Window = Moon:CreateWindow({ Title = "My Script" })
+local Tab = Window:CreateTab("Main")
+Tab:CreateSection("Example Button")
+Tab:CreateButton({ Name="Hello World", Description="Prints Hello", Callback=function() print("Hello World") end })
